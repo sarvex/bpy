@@ -73,29 +73,50 @@ def CMP_UI_draw(self, context, ):
 
 
 def default_presets():
-    d = {'filmic_high_contrast': ('sRGB', 'Filmic', 0.0, 1.0, 'Filmic - High Contrast', False, 'sRGB', ),
-         'filmic_medium_high_contrast': ('sRGB', 'Filmic', 0.0, 1.0, 'Filmic - Medium High Contrast', False, 'sRGB', ),
-         'standard': ('sRGB', 'Standard', 0.0, 1.0, 'None', False, 'sRGB', ), }
-    return d
+    return {
+        'filmic_high_contrast': (
+            'sRGB',
+            'Filmic',
+            0.0,
+            1.0,
+            'Filmic - High Contrast',
+            False,
+            'sRGB',
+        ),
+        'filmic_medium_high_contrast': (
+            'sRGB',
+            'Filmic',
+            0.0,
+            1.0,
+            'Filmic - Medium High Contrast',
+            False,
+            'sRGB',
+        ),
+        'standard': (
+            'sRGB',
+            'Standard',
+            0.0,
+            1.0,
+            'None',
+            False,
+            'sRGB',
+        ),
+    }
 
 
 def setup():
     subdir = bpy.types.CMP_MT_presets.preset_subdir
     path = os.path.join(bpy.utils.user_resource('SCRIPTS'), 'presets', subdir, )
     preset_paths = bpy.utils.preset_paths(subdir)
-    if(path not in preset_paths):
-        if(not os.path.exists(path)):
-            os.makedirs(path)
-    
+    if (path not in preset_paths) and (not os.path.exists(path)):
+        os.makedirs(path)
+
     preset_paths = bpy.utils.preset_paths(subdir)
     found = []
     for p in preset_paths:
         files = [f for f in os.listdir(p) if os.path.isfile(os.path.join(p, f))]
-        for f in files:
-            if(f.endswith(".py")):
-                found.append(os.path.splitext(f)[0])
-    
-    if(len(found) == 0):
+        found.extend(os.path.splitext(f)[0] for f in files if (f.endswith(".py")))
+    if not found:
         d = default_presets()
         t = textwrap.dedent('''\
             import bpy
@@ -111,7 +132,7 @@ def setup():
         ''')
         for n, p in d.items():
             s = t.format(*p)
-            with open(os.path.join(path, "{}.py".format(n)), mode='w', encoding='utf-8') as f:
+            with open(os.path.join(path, f"{n}.py"), mode='w', encoding='utf-8') as f:
                 f.write(s)
 
 

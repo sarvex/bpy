@@ -66,7 +66,7 @@ import mathutils.geometry
 
 
 def log(msg, indent=0, prefix='>', ):
-    m = "{}{} {}".format("    " * indent, prefix, msg)
+    m = f'{"    " * indent}{prefix} {msg}'
     if(debug_mode()):
         print(m)
 
@@ -104,27 +104,27 @@ class Progress():
 
 class PCMeshInstancerMeshGenerator():
     def __init__(self, mesh_type='VERTEX', length=1.0, radius=1.0, subdivision=2, ):
-        if(mesh_type not in ('VERTEX', 'TRIANGLE', 'TETRAHEDRON', 'CUBE', 'ICOSPHERE', )):
-            raise TypeError("Unknown mesh type: {}".format(mesh_type))
-        
+        if (mesh_type not in ('VERTEX', 'TRIANGLE', 'TETRAHEDRON', 'CUBE', 'ICOSPHERE', )):
+            raise TypeError(f"Unknown mesh type: {mesh_type}")
+
         self.mesh_type = mesh_type
-        
+
         if(length <= 0):
             log("length is (or less than) 0, which is ridiculous. setting to 0.001..", 1)
             length = 0.001
         self.length = length
-        
+
         if(radius <= 0):
             log("radius is (or less than) 0, which is ridiculous. setting to 0.001..", 1)
             radius = 0.001
         self.radius = radius
-        
+
         subdivision = int(subdivision)
-        if(not (0 < subdivision <= 2)):
-            log("subdivision 1 or 2 allowed, not {}, setting to 1".format(subdivision), 1)
+        if (not (0 < subdivision <= 2)):
+            log(f"subdivision 1 or 2 allowed, not {subdivision}, setting to 1", 1)
             subdivision = 1
         self.subdivision = subdivision
-        
+
         self.def_verts, self.def_edges, self.def_faces = self.generate()
     
     def generate(self):
@@ -177,8 +177,8 @@ class PCMeshInstancerMeshGenerator():
 
 class PCMeshInstancer():
     def __init__(self, name, points, generator=None, matrix=None, size=0.01, normal_align=False, vcols=False, ):
-        log("{}:".format(self.__class__.__name__), 0, )
-        
+        log(f"{self.__class__.__name__}:", 0)
+
         self.name = name
         self.points = points
         if(generator is None):
@@ -190,35 +190,35 @@ class PCMeshInstancer():
         self.size = size
         self.normal_align = normal_align
         self.vcols = vcols
-        
+
         self.uuid = uuid.uuid1()
-        
+
         log("calculating matrices..", 1)
         self.calc_matrices()
-        
+
         log("calculating mesh..", 1)
         self.calc_mesh_data()
-        
+
         log("creating mesh..", 1)
         self.mesh = bpy.data.meshes.new(self.name)
         self.mesh.from_pydata(self.verts, self.edges, self.faces)
         self.object = self.add_object(self.name, self.mesh)
         self.object.matrix_world = self.matrix
         self.activate_object(self.object)
-        
+
         if(self.vcols):
             log("making vertex colors..", 1)
             self.make_vcols()
-        
+
         log("cleanup..", 1)
-        
+
         context = bpy.context
         view_layer = context.view_layer
         collection = view_layer.active_layer_collection.collection
         collection.objects.unlink(self.def_object)
         bpy.data.objects.remove(self.def_object)
         bpy.data.meshes.remove(self.def_mesh)
-        
+
         log("done.", 1)
     
     def add_object(self, name, data, ):
@@ -310,18 +310,20 @@ class PCMeshInstancer():
         self.edges = [(0, 0)] * (l * len(self.generator.def_edges))
         self.faces = [(0)] * (l * len(self.generator.def_faces))
         self.colors = [None] * l
-        
+
         # generator data
         v, e, f = self.generator.generate()
         self.def_verts = v
         self.def_edges = e
         self.def_faces = f
-        
+
         # def object
-        self.def_mesh = bpy.data.meshes.new("PCInstancer-def_mesh-{}".format(self.uuid))
+        self.def_mesh = bpy.data.meshes.new(f"PCInstancer-def_mesh-{self.uuid}")
         self.def_mesh.from_pydata(v, e, f)
-        self.def_object = self.add_object("PCInstancer-def_object-{}".format(self.uuid), self.def_mesh)
-        
+        self.def_object = self.add_object(
+            f"PCInstancer-def_object-{self.uuid}", self.def_mesh
+        )
+
         # loop over matrices
         for i, m in enumerate(self.matrices):
             # transform mesh
@@ -346,34 +348,30 @@ class PCMeshInstancer():
                 self.edges[(i * ee) + j] = ((i * ev) + self.def_edges[j][0],
                                             (i * ev) + self.def_edges[j][1], )
         # faces
-        if(len(self.def_faces) is not 0):
+        if (len(self.def_faces) is not 0):
             for j in range(ef):
                 # tris
-                if(len(self.def_faces[j]) == 3):
+                if (len(self.def_faces[j]) == 3):
                     self.faces[(i * ef) + j] = ((i * ev) + self.def_faces[j][0],
                                                 (i * ev) + self.def_faces[j][1],
                                                 (i * ev) + self.def_faces[j][2], )
-                # quads
                 elif(len(self.def_faces[j]) == 4):
                     self.faces[(i * ef) + j] = ((i * ev) + self.def_faces[j][0],
                                                 (i * ev) + self.def_faces[j][1],
                                                 (i * ev) + self.def_faces[j][2],
                                                 (i * ev) + self.def_faces[j][3], )
-                # ngons
                 else:
-                    ngon = []
-                    for a in range(len(self.def_faces[j])):
-                        ngon.append((i * ev) + self.def_faces[j][a])
+                    ngon = [(i * ev) + self.def_faces[j][a] for a in range(len(self.def_faces[j]))]
                     self.faces[(i * ef) + j] = tuple(ngon)
     
     def make_vcols(self):
-        if(len(self.mesh.loops) != 0):
+        if (len(self.mesh.loops) != 0):
             colors = []
-            for i, v in enumerate(self.points):
+            for v in self.points:
                 rgb = (v[6], v[7], v[8])
                 col = (rgb[0] / 255.0, rgb[1] / 255.0, rgb[2] / 255.0)
                 colors.append(col)
-            
+
             num = len(self.def_verts)
             vc = self.mesh.vertex_colors.new()
             for l in self.mesh.loops:
@@ -387,10 +385,10 @@ class PCMeshInstancer():
 
 class PCMeshInstancer2():
     def __init__(self, name, vs, ns=None, cs=None, generator=None, matrix=None, size=0.01, with_normal_align=False, with_vertex_colors=False, ):
-        log("{}:".format(self.__class__.__name__), 0, )
-        
+        log(f"{self.__class__.__name__}:", 0)
+
         self.name = name
-        
+
         self.vs = vs
         self.has_normals = True
         if(ns is None):
@@ -402,7 +400,7 @@ class PCMeshInstancer2():
             self.has_colors = False
             with_vertex_colors = False
         self.cs = cs
-        
+
         if(generator is None):
             generator = PCMeshInstancerMeshGenerator()
         self.generator = generator
@@ -412,9 +410,9 @@ class PCMeshInstancer2():
         self.size = size
         self.with_normal_align = with_normal_align
         self.with_vertex_colors = with_vertex_colors
-        
+
         self.uuid = uuid.uuid1()
-        
+
         log("matrices..", 1)
         self.calc_matrices()
         log("mesh data..", 1)
@@ -485,89 +483,89 @@ class PCMeshInstancer2():
     
     def calc_mesh(self):
         matrices = self.matrices
-        
+
         gv, _, gf = self.generator.generate()
-        me = bpy.data.meshes.new('tmp-{}'.format(self.uuid))
+        me = bpy.data.meshes.new(f'tmp-{self.uuid}')
         me.from_pydata(gv, [], gf)
         bm = bmesh.new()
         bm.from_mesh(me)
         bmesh.ops.triangulate(bm, faces=bm.faces)
         bm.to_mesh(me)
         bm.free()
-        
+
         gv = np.zeros((len(me.vertices) * 3), dtype=np.float, )
         me.vertices.foreach_get("co", gv, )
         gv.shape = (len(me.vertices), 3, )
         gf = np.zeros((len(me.polygons) * 3), dtype=np.int, )
         me.polygons.foreach_get("vertices", gf, )
         gf.shape = (len(me.polygons), 3, )
-        
+
         self.g_vs_chunk_length = len(gv)
         self.g_fs_chunk_length = len(gf)
-        
+
         zgv = gv[:]
         zgv.shape = (-1, )
-        
+
         vs = np.zeros((len(matrices) * len(gv) * 3), dtype=np.float, )
         fs = np.zeros((len(matrices) * len(gf) * 3), dtype=np.int, )
-        
+
         cos = np.zeros((len(me.vertices) * 3), dtype=np.float, )
         fis = np.zeros((len(me.polygons) * 3), dtype=np.int, )
         for i, m in enumerate(matrices):
             # doesn't work when passing ndarray directly
             me.transform(Matrix(m))
-            
+
             me.vertices.foreach_get("co", cos)
             vs[i * len(cos):(i * len(cos)) + len(cos)] = cos
             me.polygons.foreach_get("vertices", fis, )
             fis += (i * len(me.vertices), )
             fs[i * len(fis):(i * len(fis)) + len(fis)] = fis
-            
+
             me.vertices.foreach_set("co", zgv)
-        
+
         self.g_vs = vs
         self.g_fs = fs
-        
+
         bpy.data.meshes.remove(me)
     
     def make_mesh(self):
         me = bpy.data.meshes.new(self.name)
-        
+
         # NOTE: remember that in future: from_pydata does NOT accept numpy arrays, https://developer.blender.org/T51585
         # NOTE: so passing ndarray.tolist() to from_pydata is VERY slow, so recreate interesting bits from from_pydata implementation without using itertools
-        
+
         vertices = self.g_vs
         faces = self.g_fs
-        
-        vl = int(len(vertices) / 3)
-        fl = int(len(faces) / 3)
+
+        vl = len(vertices) // 3
+        fl = len(faces) // 3
         me.vertices.add(vl)
         me.loops.add(fl * 3)
         me.polygons.add(fl)
-        
+
         face_lengths = np.full(fl, 3, dtype=np.int, )
         loop_starts = np.arange(0, fl * 3, 3, dtype=np.int, )
-        
+
         me.vertices.foreach_set("co", vertices)
         me.polygons.foreach_set("loop_total", face_lengths)
         me.polygons.foreach_set("loop_start", loop_starts)
         me.polygons.foreach_set("vertices", faces)
-        
+
         me.validate()
-        
+
         so = bpy.context.scene.objects
         for i in so:
             i.select_set(False)
         o = bpy.data.objects.new(self.name, me)
-        
+
         view_layer = bpy.context.view_layer
         collection = view_layer.active_layer_collection.collection
         collection.objects.link(o)
         o.select_set(True)
         view_layer.objects.active = o
-        
+
         o.matrix_world = self.matrix
-        
+
         self.mesh = me
         self.object = o
     
@@ -931,10 +929,10 @@ class PCParticles():
 
 class BinPlyPointCloudReader():
     def __init__(self, path, ):
-        log("{}:".format(self.__class__.__name__), 0)
+        log(f"{self.__class__.__name__}:", 0)
         if(os.path.exists(path) is False or os.path.isdir(path) is True):
             raise OSError("did you point me to an imaginary file? ('{0}')".format(path))
-        
+
         self.path = path
         self._stream = open(self.path, "rb")
         log("reading header..", 1)
@@ -954,9 +952,9 @@ class BinPlyPointCloudReader():
             h.append(t.rstrip())
             if(t == "end_header\n"):
                 break
-        
-        self._header_length = sum([len(i) for i in raw])
-        
+
+        self._header_length = sum(len(i) for i in raw)
+
         _supported_version = '1.0'
         _byte_order = {'binary_little_endian': '<',
                        'binary_big_endian': '>',
@@ -969,7 +967,7 @@ class BinPlyPointCloudReader():
                   'uint': 'I',
                   'float': 'f',
                   'double': 'd', }
-        
+
         _ply = False
         _format = None
         _endianness = None
@@ -977,7 +975,7 @@ class BinPlyPointCloudReader():
         _comments = []
         _elements = []
         _current_element = None
-        
+
         for i, l in enumerate(h):
             if(i == 0 and l == 'ply'):
                 _ply = True
@@ -1004,14 +1002,14 @@ class BinPlyPointCloudReader():
                     _elements[_current_element]['properties'].append((n, c, t))
             if(i == len(h) - 1 and l == 'end_header'):
                 continue
-        
+
         if(not _ply):
             raise ValueError("not a ply file")
         if(_version != _supported_version):
             raise ValueError("unsupported ply file version")
         if(_endianness is None):
             raise ValueError("ascii ply files are not supported")
-        
+
         self._endianness = _endianness
         self._elements = _elements
     
@@ -1027,11 +1025,11 @@ class BinPlyPointCloudReader():
             e = self._endianness
             for i, p in enumerate(props):
                 n, t = p
-                dtp[i] = (n, '{}{}'.format(e, t))
+                dtp[i] = n, f'{e}{t}'
             dt = np.dtype(dtp)
             self._stream.seek(self._header_length)
             c = d['count']
-            log("reading {} {} elements..".format(c, nm), 2)
+            log(f"reading {c} {nm} elements..", 2)
             a = np.fromfile(self._stream, dtype=dt, count=c, )
             self.data[nm] = a
 
@@ -1062,12 +1060,12 @@ class PlyPointCloudReader():
     }
     
     def __init__(self, path, ):
-        log("{}:".format(self.__class__.__name__), 0)
-        if(os.path.exists(path) is False or os.path.isdir(path) is True):
-            raise OSError("did you point me to an imaginary file? ('{}')".format(path))
-        
+        log(f"{self.__class__.__name__}:", 0)
+        if (os.path.exists(path) is False or os.path.isdir(path) is True):
+            raise OSError(f"did you point me to an imaginary file? ('{path}')")
+
         self.path = path
-        log("will read file at: '{}'".format(self.path), 1)
+        log(f"will read file at: '{self.path}'", 1)
         log("reading header..", 1)
         self._header()
         log("reading data..", 1)
@@ -1075,40 +1073,40 @@ class PlyPointCloudReader():
             self._data_ascii()
         else:
             self._data_binary()
-        log("loaded {} vertices".format(len(self.points)), 1)
-        
+        log(f"loaded {len(self.points)} vertices", 1)
+
         # remove alpha if present (meshlab adds it)
         self.points = self.points[[b for b in list(self.points.dtype.names) if b != 'alpha']]
-        
+
         # rename diffuse_rgb to rgb, if present
         user_rgb = ('diffuse_red', 'diffuse_green', 'diffuse_blue', )
         names = self.points.dtype.names
         ls = list(names)
-        if(set(user_rgb).issubset(names)):
-            for ci, uc in enumerate(user_rgb):
+        if (set(user_rgb).issubset(names)):
+            for uc in user_rgb:
                 for i, v in enumerate(ls):
                     if(v == uc):
                         ls[i] = ls[i].replace('diffuse_', '', )
         self.points.dtype.names = tuple(ls)
-        
+
         # remove anything that is not (x, y, z, nx, ny, nz, red, green, blue) to prevent problems later
         self.points = self.points[[b for b in list(self.points.dtype.names) if b in ('x', 'y', 'z', 'nx', 'ny', 'nz', 'red', 'green', 'blue', )]]
-        
+
         # some info
         nms = self.points.dtype.names
         self.has_vertices = True
         self.has_normals = True
         self.has_colors = True
-        if(not set(('x', 'y', 'z')).issubset(nms)):
+        if not {'x', 'y', 'z'}.issubset(nms):
             self.has_vertices = False
-        if(not set(('nx', 'ny', 'nz')).issubset(nms)):
+        if not {'nx', 'ny', 'nz'}.issubset(nms):
             self.has_normals = False
-        if(not set(('red', 'green', 'blue')).issubset(nms)):
+        if not {'red', 'green', 'blue'}.issubset(nms):
             self.has_colors = False
-        log('has_vertices: {}'.format(self.has_vertices), 2)
-        log('has_normals: {}'.format(self.has_normals), 2)
-        log('has_colors: {}'.format(self.has_colors), 2)
-        
+        log(f'has_vertices: {self.has_vertices}', 2)
+        log(f'has_normals: {self.has_normals}', 2)
+        log(f'has_colors: {self.has_colors}', 2)
+
         log("done.", 1)
     
     def _header(self):
@@ -1121,10 +1119,10 @@ class PlyPointCloudReader():
                 h.append(a)
                 if(a == "end_header"):
                     break
-        
+
         if(h[0] != 'ply'):
             raise TypeError("not a ply file")
-        for i, l in enumerate(h):
+        for l in h:
             if(l.startswith('format')):
                 _, f, v = l.split(' ')
                 if(f not in self._supported_formats):
@@ -1135,13 +1133,13 @@ class PlyPointCloudReader():
                 self._ply_version = v
                 if(self._ply_format != 'ascii'):
                     self._endianness = self._byte_order[self._ply_format]
-        
+
         self._elements = []
         current_element = None
         for i, l in enumerate(h):
-            if(l.startswith('ply')):
-                pass
-            elif(l.startswith('format')):
+            if (l.startswith('ply')):
+                continue
+            if (l.startswith('format')):
                 pass
             elif(l.startswith('comment')):
                 pass
@@ -1150,25 +1148,17 @@ class PlyPointCloudReader():
                 a = {'type': t, 'count': int(c), 'props': [], }
                 self._elements.append(a)
                 current_element = a
-            elif(l.startswith('property')):
-                if(l.startswith('property list')):
+            elif (l.startswith('property')):
+                if (l.startswith('property list')):
                     _, _, c, t, n = l.split(' ')
-                    if(self._ply_format == 'ascii'):
-                        current_element['props'].append((n, self._types[c], self._types[t], ))
-                    else:
-                        current_element['props'].append((n, self._types[c], self._types[t], ))
+                    current_element['props'].append((n, self._types[c], self._types[t], ))
                 else:
                     _, t, n = l.split(' ')
-                    if(self._ply_format == 'ascii'):
-                        current_element['props'].append((n, self._types[t]))
-                    else:
-                        current_element['props'].append((n, self._types[t]))
-            elif(l.startswith('end_header')):
-                pass
-            else:
-                log('unknown header line: {}'.format(l))
-        
-        if(self._ply_format == 'ascii'):
+                    current_element['props'].append((n, self._types[t]))
+            elif not (l.startswith('end_header')):
+                log(f'unknown header line: {l}')
+
+        if (self._ply_format == 'ascii'):
             skip = False
             flen = 0
             hlen = 0
@@ -1183,25 +1173,25 @@ class PlyPointCloudReader():
             self._header_length = hlen
             self._file_length = flen
         else:
-            self._header_length = sum([len(i) for i in raw])
+            self._header_length = sum(len(i) for i in raw)
     
     def _data_binary(self):
         self.points = []
-        
+
         read_from = self._header_length
         for ie, element in enumerate(self._elements):
             if(element['type'] != 'vertex'):
                 continue
-            
+
             dtp = []
-            for i, p in enumerate(element['props']):
+            for p in element['props']:
                 n, t = p
-                dtp.append((n, '{}{}'.format(self._endianness, t), ))
+                dtp.append((n, f'{self._endianness}{t}'))
             dt = np.dtype(dtp)
             with open(self.path, mode='rb') as f:
                 f.seek(read_from)
                 a = np.fromfile(f, dtype=dt, count=element['count'], )
-            
+
             self.points = a
             read_from += element['count']
     
@@ -1238,18 +1228,18 @@ class BinPlyPointCloudWriter():
     _comment = "created with Point Cloud Visualizer"
     
     def __init__(self, path, points, ):
-        log("{}:".format(self.__class__.__name__), 0)
+        log(f"{self.__class__.__name__}:", 0)
         self.path = os.path.realpath(path)
-        
+
         # write
-        log("will write to: {}".format(self.path), 1)
+        log(f"will write to: {self.path}", 1)
         # write to temp file first
         n = os.path.splitext(os.path.split(self.path)[1])[0]
-        t = "{}.temp.ply".format(n)
+        t = f"{n}.temp.ply"
         p = os.path.join(os.path.dirname(self.path), t)
-        
+
         l = len(points)
-        
+
         with open(p, 'wb') as f:
             # write header
             log("writing header..", 2)
@@ -1257,33 +1247,31 @@ class BinPlyPointCloudWriter():
             h = "ply\n"
             # x should be a float of some kind, therefore we can get endianess
             bo = dt['x'].byteorder
-            if(bo != '='):
-                # not native byteorder
-                if(bo == '>'):
-                    h += "format {} 1.0\n".format(self._byte_order['big'])
-                else:
-                    h += "format {} 1.0\n".format(self._byte_order['little'])
-            else:
+            if bo == '=':
                 # byteorder was native, use what sys.byteorder says..
-                h += "format {} 1.0\n".format(self._byte_order[sys.byteorder])
-            h += "element vertex {}\n".format(l)
+                h += f"format {self._byte_order[sys.byteorder]} 1.0\n"
+            elif bo == '>':
+                h += f"format {self._byte_order['big']} 1.0\n"
+            else:
+                h += f"format {self._byte_order['little']} 1.0\n"
+            h += f"element vertex {l}\n"
             # construct header from data names/types in points array
             for n in dt.names:
                 t = self._types[dt[n].char]
-                h += "property {} {}\n".format(t, n)
-            h += "comment {}\n".format(self._comment)
+                h += f"property {t} {n}\n"
+            h += f"comment {self._comment}\n"
             h += "end_header\n"
             f.write(h.encode('ascii'))
-            
+
             # write data
-            log("writing data.. ({} points)".format(l), 2)
+            log(f"writing data.. ({l} points)", 2)
             f.write(points.tobytes())
-        
+
         # remove original file (if needed) and rename temp
         if(os.path.exists(self.path)):
             os.remove(self.path)
         shutil.move(p, self.path)
-        
+
         log("done.", 1)
 
 

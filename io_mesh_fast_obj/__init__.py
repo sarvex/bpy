@@ -53,7 +53,7 @@ DEBUG = True
 
 
 def log(msg="", indent=0, prefix="> "):
-    m = "{}{}{}".format("    " * indent, prefix, msg, )
+    m = f'{"    " * indent}{prefix}{msg}'
     if(DEBUG):
         print(m)
 
@@ -64,54 +64,54 @@ class FastOBJReader():
         name = os.path.splitext(os.path.split(path)[1])[0]
         log("will import .obj at: {}".format(path), 1)
         log_args_align = 30
-        
+
         # t = time.time()
-        
+
         def add_object(name, data, ):
             so = bpy.context.scene.objects
             for i in so:
                 i.select_set(False)
-            
+
             o = bpy.data.objects.new(name, data)
             # so.link(o)
-            
+
             context = bpy.context
             view_layer = context.view_layer
             collection = view_layer.active_layer_collection.collection
             collection.objects.link(o)
-            
+
             view_layer.objects.active = o
-            
+
             # o.select = True
             o.select_set(True)
             # if(so.active is None or so.active.mode == 'OBJECT'):
             #     so.active = o
             return o
-        
+
         # def activate_object(obj, ):
         #     bpy.ops.object.select_all(action='DESELECT')
         #     sc = bpy.context.scene
         #     obj.select = True
         #     sc.objects.active = obj
-        
+
         log("reading..", 1)
         ls = None
         with open(path, mode='r', encoding='utf-8') as f:
             ls = f.readlines()
-        
+
         def v(l):
             a = l.split()[1:]
             return tuple(map(float, a))
-        
+
         def vt(l):
             a = l.split()[1:]
             return tuple(map(float, a))
-        
+
         def f(l):
             a = l.split()[1:]
             ls = map(int, a)
-            return tuple([i - 1 for i in ls])
-        
+            return tuple(i - 1 for i in ls)
+
         def fn(l):
             a = l.split()[1:]
             ls = [i.split('/') for i in a]
@@ -119,7 +119,7 @@ class FastOBJReader():
             for i, p in enumerate(ls):
                 f.append(int(p[0]) - 1)
             return f
-        
+
         def ftn(l):
             a = l.split()[1:]
             ls = [i.split('/') for i in a]
@@ -129,7 +129,7 @@ class FastOBJReader():
                 f.append(int(p[0]) - 1)
                 t.append(int(p[1]) - 1)
             return f, t
-        
+
         def vc_mrgb(l):
             r = []
             m = []
@@ -139,19 +139,19 @@ class FastOBJReader():
                 v = l[i:i + 8]
                 c = (int(v[2:4], 16) / 255, int(v[4:6], 16) / 255, int(v[6:8], 16) / 255)
                 r.append(c)
-                m.append(int(v[0:2], 16) / 255)
+                m.append(int(v[:2], 16) / 255)
             return r, m
-        
+
         def v_vc_ext(l):
             a = l.split()[1:]
             v = tuple(map(float, a))
             p = v[:3]
             c = v[3:]
-            if(use_vcols_ext_with_gamma):
+            if use_vcols_ext_with_gamma:
                 g = 1 / 2.2
-                c = tuple([i ** g for i in c])
+                c = tuple(i ** g for i in c)
             return p + c
-        
+
         groups = {}
         verts = []
         tverts = []
@@ -161,19 +161,16 @@ class FastOBJReader():
         shading = []
         shading_flag = None
         mask = []
-        
+
         log("parsing..", 1)
         parsef = None
         has_uv = None
         cg = None
-        
+
         for l in ls:
-            if(l.startswith('s ')):
-                if(with_shading):
-                    if(l.lower() == 's off' or l.lower() == 's 0'):
-                        shading_flag = False
-                    else:
-                        shading_flag = True
+            if (l.startswith('s ')):
+                if with_shading:
+                    shading_flag = l.lower() not in ['s off', 's 0']
             elif(l.startswith('g ')):
                 if(with_polygroups):
                     g = l[2:]
@@ -191,7 +188,7 @@ class FastOBJReader():
             elif(l.startswith('vt ')):
                 if(with_uv):
                     tverts.append(vt(l))
-            elif(l.startswith('f ')):
+            elif (l.startswith('f ')):
                 if(parsef is None):
                     if('//' in l):
                         parsef = fn
@@ -207,28 +204,22 @@ class FastOBJReader():
                 faces.append(a)
                 if(with_shading):
                     shading.append(shading_flag)
-                if(has_uv):
-                    if(with_uv):
-                        tfaces.append(b)
-                if(with_polygroups):
-                    if(cg is not None):
-                        groups[cg].extend(a)
-            elif(l.startswith('#MRGB ')):
-                if(with_vertex_colors):
-                    if(use_vcols_mrgb):
-                        c, m = vc_mrgb(l)
-                        vcols.extend(c)
-                        if(use_m_as_vertex_group):
-                            mask.extend(m)
-            else:
-                pass
-        
+                if has_uv and with_uv:
+                    tfaces.append(b)
+                if with_polygroups and (cg is not None):
+                    groups[cg].extend(a)
+            elif (l.startswith('#MRGB ')):
+                if with_vertex_colors and use_vcols_mrgb:
+                    c, m = vc_mrgb(l)
+                    vcols.extend(c)
+                    if(use_m_as_vertex_group):
+                        mask.extend(m)
         log("making mesh..", 1)
         me = bpy.data.meshes.new(name)
         me.from_pydata(verts, [], faces)
-        
+
         log("{} {}".format("{}: ".format("with_uv").ljust(log_args_align, "."), with_uv), 1)
-        if(len(tverts) > 0):
+        if tverts:
             log("making uv map..", 1)
             me.uv_layers.new(name="UVMap")
             loops = me.uv_layers[0].data
@@ -238,62 +229,60 @@ class FastOBJReader():
                 for k in range(len(f)):
                     loops[i + k].uv = tverts[f[k]]
                 i += (k + 1)
-        
+
         log("{} {}".format("{}: ".format("with_vertex_colors").ljust(log_args_align, "."), with_vertex_colors), 1)
         log("{} {}".format("{}: ".format("use_vcols_mrgb").ljust(log_args_align, "."), use_vcols_mrgb), 1)
         log("{} {}".format("{}: ".format("use_m_as_vertex_group").ljust(log_args_align, "."), use_m_as_vertex_group), 1)
         log("{} {}".format("{}: ".format("use_vcols_ext").ljust(log_args_align, "."), use_vcols_ext), 1)
-        if(len(vcols) > 0):
+        if vcols:
             log("making vertex colors..", 1)
             me.vertex_colors.new()
             vc = me.vertex_colors.active
             vcd = vc.data
             for l in me.loops:
                 vcd[l.index].color = vcols[l.vertex_index] + (1.0, )
-        
+
         log("{} {}".format("{}: ".format("convert_axes").ljust(log_args_align, "."), convert_axes), 1)
         log("{} {}".format("{}: ".format("apply_conversion").ljust(log_args_align, "."), apply_conversion), 1)
-        if(convert_axes):
-            if(apply_conversion):
-                axis_forward = '-Z'
-                axis_up = 'Y'
-                cm = axis_conversion(from_forward=axis_forward, from_up=axis_up).to_4x4()
-                me.transform(cm)
+        if convert_axes and apply_conversion:
+            axis_forward = '-Z'
+            axis_up = 'Y'
+            cm = axis_conversion(from_forward=axis_forward, from_up=axis_up).to_4x4()
+            me.transform(cm)
         log("{} {}".format("{}: ".format("global_scale").ljust(log_args_align, "."), global_scale), 1)
         if(global_scale != 1.0):
             sm = Matrix.Scale(global_scale, 4)
             me.transform(sm)
         me.update()
-        
+
         log("adding to scene..", 1)
         self.name = name
         self.object = add_object(name, me)
-        if(len(mask) > 0):
+        if mask:
             log("making mask vertex group..", 1)
             g = self.object.vertex_groups.new(name="M")
-            indexes = [i for i in range(len(me.vertices))]
+            indexes = list(range(len(me.vertices)))
             g.add(indexes, 0.0, 'REPLACE')
             ind = g.index
             for i, v in enumerate(me.vertices):
                 v.groups[ind].weight = mask[i]
-        
-        if(convert_axes):
-            if(not apply_conversion):
-                axis_forward = '-Z'
-                axis_up = 'Y'
-                cm = axis_conversion(from_forward=axis_forward, from_up=axis_up).to_4x4()
-                m = self.object.matrix_world
-                mm = m @ cm
-                self.object.matrix_world = mm
-        
+
+        if convert_axes and (not apply_conversion):
+            axis_forward = '-Z'
+            axis_up = 'Y'
+            cm = axis_conversion(from_forward=axis_forward, from_up=axis_up).to_4x4()
+            m = self.object.matrix_world
+            mm = m @ cm
+            self.object.matrix_world = mm
+
         log("{} {}".format("{}: ".format("with_shading").ljust(log_args_align, "."), with_shading), 1)
         if(with_shading):
             log("setting shading..", 1)
             for i, p in enumerate(me.polygons):
                 p.use_smooth = shading[i]
-        
+
         log("{} {}".format("{}: ".format("with_polygroups").ljust(log_args_align, "."), with_polygroups), 1)
-        if(len(groups) > 0):
+        if groups:
             log("making polygroups..", 1)
             o = self.object
             me = o.data
@@ -301,7 +290,7 @@ class FastOBJReader():
                 o.vertex_groups.new(name=k)
                 vg = o.vertex_groups[k]
                 vg.add(list(set(v)), 1.0, 'REPLACE')
-        
+
         log("imported object: '{}'".format(self.object.name), 1)
         
         # d = datetime.timedelta(seconds=time.time() - t)
@@ -312,10 +301,10 @@ class FastOBJWriter():
     def __init__(self, context, o, path, apply_modifiers=False, apply_transformation=True, convert_axes=True, triangulate=False, use_uv=True, use_shading=False, use_vertex_colors=False, use_vcols_mrgb=True, use_vcols_ext=False, global_scale=1.0, precision=6, ):
         log("{}: {}".format(self.__class__.__name__, o.name))
         log("will write .obj at: {}".format(path), 1)
-        
+
         log("prepare..", 1)
         log_args_align = 25
-        
+
         log("{} {}".format("{}: ".format("apply_modifiers").ljust(log_args_align, "."), apply_modifiers), 1)
         owner = None
         if(apply_modifiers and o.modifiers):
@@ -325,10 +314,10 @@ class FastOBJWriter():
         else:
             owner = o
             me = owner.to_mesh()
-        
+
         bm = bmesh.new()
         bm.from_mesh(me)
-        
+
         log("{} {}".format("{}: ".format("triangulate").ljust(log_args_align, "."), triangulate), 1)
         if(triangulate):
             bmesh.ops.triangulate(bm, faces=bm.faces)
@@ -342,38 +331,38 @@ class FastOBJWriter():
             axis_up = 'Y'
             cm = axis_conversion(to_forward=axis_forward, to_up=axis_up).to_4x4()
             bm.transform(cm)
-        
+
         log("{} {}".format("{}: ".format("use_uv").ljust(log_args_align, "."), use_uv), 1)
         log("{} {}".format("{}: ".format("use_shading").ljust(log_args_align, "."), use_shading), 1)
         log("{} {}".format("{}: ".format("use_vertex_colors").ljust(log_args_align, "."), use_vertex_colors), 1)
         log("{} {}".format("{}: ".format("use_vcols_mrgb").ljust(log_args_align, "."), use_vcols_mrgb), 1)
         log("{} {}".format("{}: ".format("use_vcols_ext").ljust(log_args_align, "."), use_vcols_ext), 1)
-        
+
         log("{} {}".format("{}: ".format("global_scale").ljust(log_args_align, "."), global_scale), 1)
         if(global_scale != 1.0):
             sm = Matrix.Scale(global_scale, 4)
             bm.transform(sm)
-        
+
         log("{} {}".format("{}: ".format("precision").ljust(log_args_align, "."), precision), 1)
-        
+
         # update normals after transforms
         bm.normal_update()
-        
+
         sio = io.StringIO(initial_value='', newline='', )
         siov = io.StringIO(initial_value='', newline='', )
         siovn = io.StringIO(initial_value='', newline='', )
         siof = io.StringIO(initial_value='', newline='', )
         siovt = io.StringIO(initial_value='', newline='', )
-        
+
         # sort-of-header
         sio.write("# Fast Wavefront^2 (.obj)\n")
         sio.write('#\n')
         sio.write('o %s_%s\n' % (o.name, o.data.name))
-        
+
         # vertices
         vs = bm.verts
         bm.verts.ensure_lookup_table()
-        
+
         # vertex colors
         col_layer = None
         if(use_vertex_colors):
@@ -394,7 +383,7 @@ class FastOBJWriter():
                     # if both False, use mrgb
                     log("using MRGB vertex colors..", 1)
                     use_vcols_mrgb = True
-        
+
         fwv = siov.write
         vfmt = 'v %.{0}f %.{0}f %.{0}f\n'.format(precision)
         vfmtvcolext = 'v %.{0}f %.{0}f %.{0}f %.{0}f %.{0}f %.{0}f\n'.format(precision)
@@ -424,16 +413,16 @@ class FastOBJWriter():
                     r += c[0]
                     g += c[1]
                     b += c[2]
-                
+
                 def limit(v):
                     if(v < 0.0):
                         v = 0.0
                     if(v > 1.0):
                         v = 1.0
                     return v
-                
+
                 rgbf.append((limit(r / l), limit(g / l), limit(b / l)))
-            
+
             for v in vs:
                 fwv(vfmtvcolext % tuple(v.co[:] + rgbf[v.index]))
         else:
@@ -441,7 +430,7 @@ class FastOBJWriter():
             log("writing vertices..", 1)
             for v in vs:
                 fwv(vfmt % v.co[:])
-        
+
         if(use_vertex_colors and use_vcols_mrgb):
             # vertex colors in mrgb format
             log("writing mrgb vertex colors..", 1)
@@ -460,7 +449,7 @@ class FastOBJWriter():
                         # get rgb only
                         c = l[col_layer][:3]
                         cols[vi].append(c)
-            
+
             # average colors and convert to 0-255 format and then to hexadecimal values, leave 'm' to ff
             for cl in cols:
                 r = 0
@@ -471,31 +460,31 @@ class FastOBJWriter():
                     r += c[0]
                     g += c[1]
                     b += c[2]
-                
+
                 def limit(v):
                     if(v < 0):
                         v = 0
                     if(v > 255):
                         v = 255
                     return v
-                
+
                 rgb8 = (limit(int((r / l) * 255.0)), limit(int((g / l) * 255.0)), limit(int((b / l) * 255.0)))
                 h = 'ff%02x%02x%02x' % rgb8
                 hexc.append(h)
-            
+
             for i in range(0, len(hexc), 64):
                 # write in chunks of 64 entries per line as per specification directly after vertices
                 ch = hexc[i:i + 64]
                 s = "".join(ch)
                 fwv('#MRGB %s\n' % s)
-        
+
         # faces
         log("writing normals, faces and texture coordinates..", 1)
         fs = bm.faces
         fs.ensure_lookup_table()
         # texture coordinates stuff
-        vtlocs = dict()
-        vtmaps = dict()
+        vtlocs = {}
+        vtmaps = {}
         vtli = 0
         uvl = None
         if(use_uv):
@@ -504,7 +493,7 @@ class FastOBJWriter():
             use_uv = False
         # smoothing stuff
         fsmooth = None
-        normap = dict()
+        normap = {}
         norlen = 0
         nori = 0
         # shortcuts
@@ -513,7 +502,7 @@ class FastOBJWriter():
         fwf = siof.write
         fwvt = siovt.write
         vtfmt = 'vt %.{0}f %.{0}f\n'.format(precision)
-        
+
         if(use_uv):
             # if using texture coordinates, precalculate them first, each coordinate should be reused, no duplicates
             for f in fs:
@@ -523,42 +512,35 @@ class FastOBJWriter():
                     vi = l.vert.index
                     li = l.index
                     fi = f.index
-                    
+
                     if(uv not in vtlocs):
                         vtlocs[uv] = vtli
                         vtli += 1
                         fwvt(vtfmt % uv)
-                    
+
                     e = [fi, vi, li, vtlocs[uv]]
                     if(fi not in vtmaps):
                         vtmaps[fi] = [e, ]
                     else:
                         vtmaps[fi].append(e)
-        
+
         for f in fs:
-            if(use_shading):
-                # write shading flag, only change when flag is changed for following face
-                if(fsmooth != f.smooth):
-                    fsmooth = f.smooth
-                    if(fsmooth):
-                        fwf("s 1\n")
-                    else:
-                        fwf("s off\n")
-            
+            if use_shading and (fsmooth != f.smooth):
+                fsmooth = f.smooth
+                if(fsmooth):
+                    fwf("s 1\n")
+                else:
+                    fwf("s off\n")
+
             # start writing face
             fwf("f")
             fi = f.index
             vs = f.verts
             n = len(vs)
-            
+
             for i in range(n):
-                if(use_shading):
-                    if(fsmooth):
-                        # write smooth face with vertex normals
-                        nor = vs[i].normal[:]
-                    else:
-                        # write flat face with face normal
-                        nor = f.normal[:]
+                if use_shading:
+                    nor = vs[i].normal[:] if fsmooth else f.normal[:]
                     if(nor in normap):
                         # use already defined normal
                         nori = normap[nor]
@@ -568,7 +550,7 @@ class FastOBJWriter():
                         norlen += 1
                         nori = norlen
                         fwvn(vnfmt % nor)
-                
+
                 vi = vs[i].index
                 if(use_uv):
                     # get correct texture coordinates
@@ -585,7 +567,7 @@ class FastOBJWriter():
                     fwf(" %d//%d" % (vi + 1, nori))
             # finish face
             fwf("\n")
-        
+
         # put it all to one string
         log("writing to disk..", 1)
         tp = "{}.tmp".format(path)
@@ -606,7 +588,7 @@ class FastOBJWriter():
             os.remove(path)
         # rename to final file name
         shutil.move(tp, path)
-        
+
         log("cleanup..", 1)
         bm.free()
         owner.to_mesh_clear()
@@ -659,9 +641,9 @@ class ExportFastOBJ(Operator, ExportHelper):
     
     def execute(self, context):
         t = time.time()
-        
+
         o = context.active_object
-        
+
         if(USE_PY_EXPORT):
             log("WARNING: cython module not found, using python implementation")
             d = {'context': context,
@@ -679,23 +661,21 @@ class ExportFastOBJ(Operator, ExportHelper):
                  'global_scale': self.global_scale,
                  'precision': self.precision, }
             w = FastOBJWriter(**d)
-            
+
             log("completed in {}.".format(datetime.timedelta(seconds=time.time() - t)))
             return {'FINISHED'}
-        
-        log("{}:".format(self.__class__.__name__), 0, )
-        log("using Cython module: {}".format(not USE_PY_EXPORT), 1)
-        log("will write .obj at: {}".format(self.filepath), 1)
-        
+
+        log(f"{self.__class__.__name__}:", 0)
+        log(f"using Cython module: {not USE_PY_EXPORT}", 1)
+        log(f"will write .obj at: {self.filepath}", 1)
+
         owner = None
-        if(self.apply_modifiers and o.modifiers):
+        if (self.apply_modifiers and o.modifiers):
             depsgraph = context.evaluated_depsgraph_get()
             owner = o.evaluated_get(depsgraph)
-            m = owner.to_mesh()
         else:
             owner = o
-            m = owner.to_mesh()
-        
+        m = owner.to_mesh()
         if(self.apply_transformation):
             mw = o.matrix_world.copy()
             m.transform(mw)
@@ -713,27 +693,27 @@ class ExportFastOBJ(Operator, ExportHelper):
         if(self.global_scale != 1.0):
             sm = Matrix.Scale(self.global_scale, 4)
             m.transform(sm)
-        
+
         has_uv = self.use_uv
-        if(has_uv):
-            if(not len(m.uv_layers)):
-                has_uv = False
+        if has_uv and (not len(m.uv_layers)):
+            has_uv = False
         has_vcols = self.use_vcols
-        if(has_vcols):
-            if(not len(m.vertex_colors)):
-                has_vcols = False
-        
-        export_obj.export_obj(m.as_pointer(),
-                              self.filepath,
-                              "{}-{}".format(o.name, o.data.name),
-                              use_normals=self.use_normals,
-                              use_uv=has_uv,
-                              use_vcols=has_vcols,
-                              precision=self.precision,
-                              debug=DEBUG, )
-        
+        if has_vcols and (not len(m.vertex_colors)):
+            has_vcols = False
+
+        export_obj.export_obj(
+            m.as_pointer(),
+            self.filepath,
+            f"{o.name}-{o.data.name}",
+            use_normals=self.use_normals,
+            use_uv=has_uv,
+            use_vcols=has_vcols,
+            precision=self.precision,
+            debug=DEBUG,
+        )
+
         owner.to_mesh_clear()
-        
+
         log("completed in {}.".format(datetime.timedelta(seconds=time.time() - t)))
         return {'FINISHED'}
 
@@ -753,14 +733,12 @@ class ImportFastOBJ(Operator, ImportHelper):
     with_uv: BoolProperty(name="With UV", default=True, description="Import texture coordinates.", )
     
     def vcol_update_mrgb(self, context):
-        if(self.with_vertex_colors_mrgb):
-            if(self.with_vertex_colors_extended):
-                self.with_vertex_colors_extended = False
+        if self.with_vertex_colors_mrgb and self.with_vertex_colors_extended:
+            self.with_vertex_colors_extended = False
     
     def vcol_update_ext(self, context):
-        if(self.with_vertex_colors_extended):
-            if(self.with_vertex_colors_mrgb):
-                self.with_vertex_colors_mrgb = False
+        if self.with_vertex_colors_extended and self.with_vertex_colors_mrgb:
+            self.with_vertex_colors_mrgb = False
     
     with_vertex_colors_mrgb: BoolProperty(name="With Vertex Colors (#MRGB)", default=True, description="Import vertex colors, this is not part of official file format specification. ZBrush uses MRGB comments to write Polypaint to OBJ.", update=vcol_update_mrgb, )
     with_vertex_colors_extended: BoolProperty(name="With Vertex Colors (x,y,z,r,g,b)", default=False, description="Import vertex colors in 'extended' format where vertex is defined as (x, y, z, r, g, b), this is not part of official file format specification.", update=vcol_update_ext, )
@@ -821,11 +799,10 @@ class ImportFastOBJ(Operator, ImportHelper):
     
     def execute(self, context):
         t = time.time()
-        
-        vcols = False
-        if(self.with_vertex_colors_mrgb or self.with_vertex_colors_extended):
-            vcols = True
-        
+
+        vcols = bool(
+            (self.with_vertex_colors_mrgb or self.with_vertex_colors_extended)
+        )
         d = {'path': self.filepath,
              'convert_axes': self.convert_axes,
              'with_uv': self.with_uv,
@@ -839,10 +816,10 @@ class ImportFastOBJ(Operator, ImportHelper):
              'global_scale': self.global_scale,
              'apply_conversion': self.apply_conversion, }
         r = FastOBJReader(**d)
-        
+
         d = datetime.timedelta(seconds=time.time() - t)
-        log("completed in {}.".format(d), 0)
-        
+        log(f"completed in {d}.", 0)
+
         return {'FINISHED'}
 
 

@@ -58,7 +58,7 @@ class ObjDiff():
     
     @classmethod
     def diff(cls):
-        obs = [o for o in bpy.data.objects]
+        obs = list(bpy.data.objects)
         if(cls._objects is None):
             cls._objects = obs
             return None, None, None
@@ -80,10 +80,14 @@ class Utils():
     
     @classmethod
     def get_spaceview3d(cls):
-        for a in bpy.context.screen.areas:
-            if(a.type == "VIEW_3D"):
-                return a.spaces[0]
-        return None
+        return next(
+            (
+                a.spaces[0]
+                for a in bpy.context.screen.areas
+                if (a.type == "VIEW_3D")
+            ),
+            None,
+        )
     
     @classmethod
     def normalize(cls, v, vmin, vmax):
@@ -110,9 +114,7 @@ class Utils():
             raise ValueError("Maximum value is smaller than or equal to minimum.")
         if(v <= vmin):
             return vmin
-        if(v >= vmax):
-            return vmax
-        return v
+        return vmax if (v >= vmax) else v
     
     @classmethod
     def maprange(cls, v, ar, br, ):
@@ -217,10 +219,10 @@ class CARBON_OT_extract_mesh_part(Operator):
     
     def extract(self, context, ):
         o = context.active_object
-        
+
         sm = context.tool_settings.mesh_select_mode[:]
         context.tool_settings.mesh_select_mode = (False, False, True)
-        
+
         ObjDiff.diff()
         bpy.ops.mesh.separate(type='SELECTED')
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -228,28 +230,26 @@ class CARBON_OT_extract_mesh_part(Operator):
         e = a[0]
         Utils.activate_object(e)
         n = o.name
-        e.name = "{}-{}-extracted".format(n, uuid.uuid1())
+        e.name = f"{n}-{uuid.uuid1()}-extracted"
         e.parent = o
         e.matrix_world = o.matrix_world.copy()
-        
+
         bpy.ops.object.mode_set(mode='EDIT')
         bpy.ops.mesh.select_all(action='DESELECT')
         context.tool_settings.mesh_select_mode = (True, False, False)
-        
+
         ctp = context.scene.carbon_tools
         if(ctp.extract_protect):
             bpy.ops.mesh.select_non_manifold()
             bpy.ops.mesh.hide(unselected=False)
-        
+
         context.tool_settings.mesh_select_mode = sm
-        
+
         return True
     
     def execute(self, context):
         r = self.extract(context)
-        if(r is False):
-            return {'CANCELLED'}
-        return {'FINISHED'}
+        return {'CANCELLED'} if (r is False) else {'FINISHED'}
 
 
 class CARBON_OT_insert_mesh_part(Operator):
@@ -294,9 +294,7 @@ class CARBON_OT_insert_mesh_part(Operator):
     
     def execute(self, context):
         r = self.insert(context)
-        if(r is False):
-            return {'CANCELLED'}
-        return {'FINISHED'}
+        return {'CANCELLED'} if (r is False) else {'FINISHED'}
 
 
 class CARBON_OT_extract_non_manifold_elements(Operator):
@@ -317,15 +315,15 @@ class CARBON_OT_extract_non_manifold_elements(Operator):
         bpy.ops.mesh.select_all(action='DESELECT')
         bpy.ops.mesh.select_non_manifold()
         bpy.ops.object.mode_set(mode='OBJECT')
-        ok = sum([v.select for v in o.data.vertices])
+        ok = sum(v.select for v in o.data.vertices)
         bpy.ops.object.mode_set(mode='EDIT')
         if(not ok):
             self.report({'ERROR'}, "Nothing non-manifold found.")
             return {'CANCELLED'}
-        
-        for i in range(10):
+
+        for _ in range(10):
             bpy.ops.mesh.select_more()
-        
+
         ct = context.scene.carbon_tools
         ctep = ct.extract_protect
         ct.extract_protect = False
@@ -400,7 +398,7 @@ class CARBON_OT_export_obj_to_zbrush(Operator):
         b = bpy.data.filepath
         h, t = os.path.split(b)
         n, e = os.path.splitext(t)
-        p = os.path.join(h, '{}.obj'.format(n))
+        p = os.path.join(h, f'{n}.obj')
         d = {'filepath': p,
              'apply_modifiers': False,
              'apply_transformation': True,
@@ -411,13 +409,13 @@ class CARBON_OT_export_obj_to_zbrush(Operator):
              'use_vcols': False,
              'global_scale': 1.0,
              'precision': 6, }
-        
+
         try:
             bpy.ops.export_mesh.fast_obj(**d)
         except AttributeError:
             self.report({'ERROR'}, "'Fast Wavefront^2' addon is not installed and activated")
             return {'CANCELLED'}
-        
+
         return {'FINISHED'}
 
 
@@ -468,7 +466,7 @@ class CARBON_OT_export_obj_to_photoscan(Operator):
         b = bpy.data.filepath
         h, t = os.path.split(b)
         n, e = os.path.splitext(t)
-        p = os.path.join(h, '{}.obj'.format(n))
+        p = os.path.join(h, f'{n}.obj')
         d = {'filepath': p,
              'apply_modifiers': False,
              'apply_transformation': False,
@@ -479,13 +477,13 @@ class CARBON_OT_export_obj_to_photoscan(Operator):
              'use_vcols': False,
              'global_scale': 1.0,
              'precision': 6, }
-        
+
         try:
             bpy.ops.export_mesh.fast_obj(**d)
         except AttributeError:
             self.report({'ERROR'}, "'Fast Wavefront^2' addon is not installed and activated")
             return {'CANCELLED'}
-        
+
         return {'FINISHED'}
 
 
@@ -571,7 +569,7 @@ class CARBON_OT_select_seams(Operator):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return (ob and ob.type == 'MESH' and (context.mode == 'EDIT_MESH' or context.mode == 'OBJECT'))
+        return ob and ob.type == 'MESH' and context.mode in ['EDIT_MESH', 'OBJECT']
     
     def execute(self, context):
         if(context.mode == 'OBJECT'):
@@ -597,7 +595,12 @@ class CARBON_OT_mark_seams_from_uv_islands(Operator):
     @classmethod
     def poll(cls, context):
         ob = context.active_object
-        return (ob and ob.type == 'MESH' and (context.mode == 'EDIT_MESH' or context.mode == 'OBJECT') and len(ob.data.uv_layers) > 0)
+        return (
+            ob
+            and ob.type == 'MESH'
+            and context.mode in ['EDIT_MESH', 'OBJECT']
+            and len(ob.data.uv_layers) > 0
+        )
     
     def execute(self, context):
         e = True
@@ -629,9 +632,9 @@ class CARBON_OT_export_uv_layout(Operator):
         b = bpy.data.filepath
         h, t = os.path.split(b)
         n, e = os.path.splitext(t)
-        p = os.path.join(h, '{}.png'.format(n))
-        if(os.path.exists(p)):
-            p = os.path.join(h, '{}-{}.png'.format(n, uuid.uuid1()))
+        p = os.path.join(h, f'{n}.png')
+        if (os.path.exists(p)):
+            p = os.path.join(h, f'{n}-{uuid.uuid1()}.png')
         ctp = context.scene.carbon_tools
         r = int(ctp.export_uv_layout_resolution)
         # bpy.ops.uv.export_layout(filepath=p, check_existing=False, export_all=False, modified=False, mode='PNG', size=(r, r), opacity=1.0, tessellated=False, )
@@ -688,11 +691,7 @@ class CARBON_OT_visualize_uv_seams_as_wireframe_mesh(Operator):
         ob = context.active_object
         bm = bmesh.from_edit_mesh(ob.data)
         bm.verts.ensure_lookup_table()
-        ok = False
-        for v in bm.verts:
-            if(v.select):
-                ok = True
-                break
+        ok = any(v.select for v in bm.verts)
         if(not ok):
             self.report({'ERROR'}, "Mesh has no seams to be selected.")
             return {'CANCELLED'}
@@ -714,7 +713,11 @@ class CARBON_OT_select_non_manifold_extra(Operator):
     @classmethod
     def poll(cls, context):
         o = context.active_object
-        sm = tuple([i for i in context.tool_settings.mesh_select_mode]) != (False, False, True)
+        sm = tuple(list(context.tool_settings.mesh_select_mode)) != (
+            False,
+            False,
+            True,
+        )
         return (o and o.type == 'MESH' and context.mode == 'EDIT_MESH' and sm)
     
     def execute(self, context):
@@ -748,7 +751,7 @@ class CARBON_OT_texture_to_vertex_colors(Operator):
         #             i = n.image
         #             i_ok = os.path.exists(i.filepath_from_user())
         # return (o_ok and m_ok and n_ok and i_ok and u_ok)
-        
+
         if(context.mode != 'OBJECT'):
             return False
         o = context.active_object
@@ -770,44 +773,40 @@ class CARBON_OT_texture_to_vertex_colors(Operator):
         if(not n.image):
             return False
         i = n.image
-        if(not os.path.exists(i.filepath_from_user())):
-            return False
-        return True
+        return bool(os.path.exists(i.filepath_from_user()))
     
     def execute(self, context):
         log(self.bl_idname, 0)
-        
+
         def remap(v, min1, max1, min2, max2):
             def clamp(v, vmin, vmax):
                 if(vmax <= vmin):
                     raise ValueError("Maximum value is smaller than or equal to minimum.")
                 if(v <= vmin):
                     return vmin
-                if(v >= vmax):
-                    return vmax
-                return v
-            
+                return vmax if (v >= vmax) else v
+
             def normalize(v, vmin, vmax):
                 return (v - vmin) / (vmax - vmin)
-            
+
             def interpolate(nv, vmin, vmax):
                 return vmin + (vmax - vmin) * nv
-            
+
             v = clamp(v, min1, max1)
             r = interpolate(normalize(v, min1, max1), min2, max2)
             r = clamp(r, min2, max2)
             return r
-        
+
         o = context.active_object
         m = o.active_material
         n = m.node_tree.nodes.active
         im = n.image
         im.update()
         w, h = im.size
-        
+
         a = np.asarray(im.pixels)
         a = a.reshape((h, w, 4))
-        
+
         o.data.vertex_colors.new(name=im.name)
         bm = bmesh.new()
         bm.from_mesh(o.data)
@@ -815,7 +814,7 @@ class CARBON_OT_texture_to_vertex_colors(Operator):
         uvl = bm.loops.layers.uv.active
         fs = bm.faces
         uv_layers = o.data.uv_layers
-        
+
         prgs = Progress(len(fs), 1)
         for f in fs:
             prgs.step()
@@ -825,11 +824,11 @@ class CARBON_OT_texture_to_vertex_colors(Operator):
                 xx = int(round(remap(x, 0.0, 1.0, 0, w - 1)))
                 yy = int(round(remap(y, 0.0, 1.0, 0, h - 1)))
                 l[col_layer] = a[yy][xx]
-        
+
         bm.to_mesh(o.data)
         bm.free()
         log("done.", 1)
-        
+
         return {'FINISHED'}
 
 
@@ -843,30 +842,26 @@ class CARBON_OT_vertex_group_to_vertex_colors(Operator):
     def poll(cls, context):
         if(context.mode != 'OBJECT'):
             return False
-        o = context.active_object
-        if(not o):
+        if o := context.active_object:
+            return False if (o.type != 'MESH') else bool(o.vertex_groups.active)
+        else:
             return False
-        if(o.type != 'MESH'):
-            return False
-        if(not o.vertex_groups.active):
-            return False
-        return True
     
     def execute(self, context):
         log(self.bl_idname, 0)
         o = context.active_object
         me = o.data
         vg = o.vertex_groups.active
-        
+
         # add zero to every vertex to have them all in group
-        indexes = [i for i in range(len(me.vertices))]
+        indexes = list(range(len(me.vertices)))
         vg.add(indexes, 0.0, 'ADD')
-        
+
         vc = me.vertex_colors.new(name=vg.name)
         me.vertex_colors.active = vc
         vcd = vc.data
         vcols = [None] * len(me.vertices)
-        
+
         log("precalculating colors:", 1)
         prgs = Progress(len(me.vertices), 2)
         for v in me.vertices:
@@ -874,7 +869,7 @@ class CARBON_OT_vertex_group_to_vertex_colors(Operator):
             i = v.index
             w = vg.weight(i)
             vcols[i] = (w, w, w, 1.0)
-        
+
         log("assigning colors:", 1)
         prgs = Progress(len(me.loops), 2)
         for l in me.loops:
@@ -882,9 +877,9 @@ class CARBON_OT_vertex_group_to_vertex_colors(Operator):
             li = l.index
             vi = l.vertex_index
             vcd[li].color = vcols[vi]
-        
+
         log("done.", 1)
-        
+
         return {'FINISHED'}
 
 
@@ -898,14 +893,10 @@ class CARBON_OT_vertex_colors_to_vertex_group(Operator):
     def poll(cls, context):
         if(context.mode != 'OBJECT'):
             return False
-        o = context.active_object
-        if(not o):
+        if o := context.active_object:
+            return False if (o.type != 'MESH') else bool(o.data.vertex_colors.active)
+        else:
             return False
-        if(o.type != 'MESH'):
-            return False
-        if(not o.data.vertex_colors.active):
-            return False
-        return True
     
     def execute(self, context):
         log(self.bl_idname, 0)
@@ -914,19 +905,19 @@ class CARBON_OT_vertex_colors_to_vertex_group(Operator):
         vc = me.vertex_colors.active
         vs = me.vertices
         ls = me.loops
-        
+
         vg = o.vertex_groups.new(name=vc.name)
-        
+
         bm = bmesh.new()
         bm.from_mesh(me)
-        
+
         lums = [None] * len(vs)
         cl = bm.loops.layers.color.active
-        
+
         bm.verts.ensure_lookup_table()
         log("precalculating weights:", 1)
         prgs = Progress(len(bm.verts), 2)
-        for i, v in enumerate(bm.verts):
+        for v in bm.verts:
             prgs.step()
             vi = v.index
             lums[vi] = []
@@ -936,11 +927,11 @@ class CARBON_OT_vertex_colors_to_vertex_group(Operator):
                 # http://stackoverflow.com/questions/596216/formula-to-determine-brightness-of-rgb-color
                 lum = math.sqrt(0.299 * r ** 2 + 0.587 * g ** 2 + 0.114 * b ** 2)
                 lums[vi].append(lum)
-        
+
         ws = [None] * len(vs)
         for i, a in enumerate(lums):
             ws[i] = sum(a) / float(len(a))
-        
+
         log("assigning weights:", 1)
         prgs = Progress(len(vs), 2)
         for i, v in enumerate(vs):
@@ -949,10 +940,10 @@ class CARBON_OT_vertex_colors_to_vertex_group(Operator):
             # if l is None, means that vertex is not connected to any face > has no loops > has no color/weight
             if(l is not None):
                 vg.add([i], w, 'REPLACE')
-        
+
         bm.free()
         log("done.", 1)
-        
+
         return {'FINISHED'}
 
 
@@ -972,28 +963,23 @@ class CARBON_OT_two_meshes_difference_to_vertex_group(Operator):
         if(o.type != 'MESH'):
             return False
         obs = context.selected_objects
-        if(len(obs) != 2):
-            return False
-        for o in obs:
-            if(o.type != 'MESH'):
-                return False
-        return True
+        return False if (len(obs) != 2) else all(o.type == 'MESH' for o in obs)
     
     def execute(self, context):
         log(self.bl_idname, 0)
-        
+
         ctp = context.scene.carbon_tools
-        
+
         modified = context.active_object
         original = [o for o in context.selected_objects if o is not modified][0]
-        
+
         identical = True
         for i, r in enumerate(original.matrix_world):
             for j, c in enumerate(r):
                 if(c != modified.matrix_world[i][j]):
                     identical = False
                     break
-        
+
         if(not identical):
             log("Original object matrix and modified object matrix are not equal.", 1, )
             log("Will copy matrix from modified to original..", 1, )
@@ -1002,86 +988,83 @@ class CARBON_OT_two_meshes_difference_to_vertex_group(Operator):
             log(mos, 1)
             log(mms, 1)
             original.matrix_world = modified.matrix_world
-        
+
         m = modified.matrix_world
         max_search_distance = Utils.real_length_to_relative(m, ctp.diff_search_distance)
         log("search_distance: {0}, max_search_distance: {1}".format(ctp.diff_search_distance, max_search_distance), 1)
-        
+
         log("calculating differences:", 1)
         mod_vs = [v.co for v in modified.data.vertices]
         mod_ns = [v.normal for v in modified.data.vertices]
-        
+
         r = []
         prgr = Progress(len(mod_vs), 2)
         for i, v in enumerate(mod_vs):
             prgr.step()
-            
+
             n = mod_ns[i]
             e0 = Utils.shift_vert_along_normal(v, n, -max_search_distance)
             e1 = Utils.shift_vert_along_normal(v, n, max_search_distance)
             pr = None
             nr = None
-            
+
             if(ctp.diff_positive):
                 _, loc, nor, ind = original.ray_cast(v, e1)
                 if(ind != -1):
                     pr = (loc, nor, ind)
                     prd = Utils.distance_tuples(pr[0], v)
-            
+
             if(ctp.diff_negative):
                 _, loc, nor, ind = original.ray_cast(v, e0)
                 if(ind != -1):
                     nr = (loc, nor, ind)
                     nrd = Utils.distance_tuples(nr[0], v)
-            
-            if(pr is not None and nr is not None):
-                # hit in both directions
-                # take closer point
-                if(prd > nrd):
-                    r.append((v, n, nr[0], nr[1], nr[2], nrd))
-                else:
-                    r.append((v, n, pr[0], pr[1], pr[2], -prd))
-            elif(pr is not None):
-                # hit positive
-                r.append((v, n, pr[0], pr[1], pr[2], -prd))
-            elif(nr is not None):
-                # hit negative
+
+            if (
+                (pr is not None and nr is not None)
+                and (prd > nrd)
+                or (pr is None or nr is None)
+                and pr is None
+                and (nr is not None)
+            ):
                 r.append((v, n, nr[0], nr[1], nr[2], nrd))
+            elif pr is not None and nr is not None or (pr is not None):
+                r.append((v, n, pr[0], pr[1], pr[2], -prd))
             else:
                 # hit nothing..
                 r.append((v, n, None, None, None, 0.0))
-        
+
         log("adding vertex group..", 1)
-        
+
         vg = modified.vertex_groups.new(name="Difference")
-        indexes = [i for i in range(len(mod_vs))]
+        indexes = list(range(len(mod_vs)))
         modified.vertex_groups.active.add(indexes, 0.5, 'REPLACE')
         vg_index = modified.vertex_groups.active_index
         weights = [i[5] for i in r]
-        
+
         arr = np.array(weights)
         mean = np.mean(arr)
         stdev = np.std(arr)
         log("mean: {0}, stdev: {1}".format(mean, stdev), 1)
-        
+
         if(mean == 0.0 or stdev == 0.0):
             log("meshes looks identical..", 1)
             log("done.", 1)
             return {'FINISHED'}
-        
+
         wmin = mean - (ctp.diff_sigma * stdev)
         wmax = mean + (ctp.diff_sigma * stdev)
         log("wmin: {0}, wmax: {1}".format(wmin, wmax), 1)
-        
+
         log("calculating weights:", 1)
         prgr = Progress(len(mod_vs), 2)
         for i, v in enumerate(modified.data.vertices):
             w = weights[i]
             v.groups[vg_index].weight = Utils.map(w, wmin, wmax, 0.0, 1.0)
             prgr.step()
-        
+
         log("done.", 1)
-        
+
         return {'FINISHED'}
 
 
@@ -1095,18 +1078,14 @@ class CARBON_OT_calc_active_uv_coverage(Operator):
     def poll(cls, context):
         if(context.mode != 'OBJECT'):
             return False
-        o = context.active_object
-        if(not o):
+        if o := context.active_object:
+            return False if (o.type != 'MESH') else bool(o.data.uv_layers.active)
+        else:
             return False
-        if(o.type != 'MESH'):
-            return False
-        if(not o.data.uv_layers.active):
-            return False
-        return True
     
     def execute(self, context):
         log(self.bl_idname, 0)
-        
+
         o = context.active_object
         mesh = o.data
         bm = bmesh.new()
@@ -1117,16 +1096,14 @@ class CARBON_OT_calc_active_uv_coverage(Operator):
         total_area = 0.0
         for f in bm.faces:
             ls = f.loops
-            uvv = []
-            for l in ls:
-                uvv.append(l[uvl].uv)
+            uvv = [l[uvl].uv for l in ls]
             a, b, c = uvv
             tri_area = ((a.x * (b.y - c.y)) + (b.x * (c.y - a.y)) + (c.x * (a.y - b.y))) / 2
             total_area += tri_area
         bm.free()
-        
+
         self.report({'INFO'}, "Area used by UV: {:0.2f}%".format(total_area * 100))
-        
+
         return {'FINISHED'}
 
 
@@ -1169,7 +1146,7 @@ class CARBON_PT_carbon_tools(Panel):
     def draw(self, context):
         ctp = context.scene.carbon_tools
         l = self.layout
-        
+
         c = l.column(align=True)
         c.label(text="Subtools")
         cc = c.column(align=True)
@@ -1182,9 +1159,9 @@ class CARBON_PT_carbon_tools(Panel):
         r.operator('carbon_tools.insert_mesh_part', text="Insert", )
         if(context.mode in ('SCULPT', 'PAINT_TEXTURE', )):
             cc.active = False
-        
+
         l.operator('carbon_tools.extract_non_manifold_elements', text="Extract Non-Manifold", )
-        
+
         c = l.column(align=True)
         c.label(text="Dyntopo Setup")
         cc = c.column(align=True)
@@ -1194,10 +1171,10 @@ class CARBON_PT_carbon_tools(Panel):
         cc.operator('carbon_tools.quick_mesh_dyntopo_cleanup_setup', text="Dyntopo Setup", )
         if(context.mode != 'OBJECT'):
             cc.active = False
-        
+
         ob = context.active_object
         toolsettings = context.tool_settings
-        
+
         sculpt = toolsettings.sculpt
         c = l.column(align=True)
         c.label(text="Dyntopo Live Settings")
@@ -1208,10 +1185,11 @@ class CARBON_PT_carbon_tools(Panel):
         cc.prop(sculpt, 'detail_refine_method', text="", )
         cc.prop(sculpt, 'detail_type_method', text="", )
         cc.enabled = False
-        if(ob and ob.type == 'MESH' and context.mode == 'SCULPT'):
-            if(context.sculpt_object.use_dynamic_topology_sculpting):
-                cc.enabled = True
-        
+        if (
+            ob and ob.type == 'MESH' and context.mode == 'SCULPT'
+        ) and context.sculpt_object.use_dynamic_topology_sculpting:
+            cc.enabled = True
+
         c = l.column(align=True)
         c.label(text="Texture Paint Setup")
         cc = c.column(align=True)
@@ -1220,11 +1198,14 @@ class CARBON_PT_carbon_tools(Panel):
         r.prop(ctp, 'tp_ext_resolution', text="", )
         # if(context.mode != 'OBJECT'):
         #     cc.active = False
-        if(ob and ob.type == 'MESH' and context.mode == 'OBJECT' and len(ob.data.uv_layers) > 0):
-            cc.active = True
-        else:
-            cc.active = False
-        
+        cc.active = bool(
+            (
+                ob
+                and ob.type == 'MESH'
+                and context.mode == 'OBJECT'
+                and len(ob.data.uv_layers) > 0
+            )
+        )
         ipaint = toolsettings.image_paint
         c = l.column(align=True)
         c.label(text="External TP Live Commands")
@@ -1234,26 +1215,25 @@ class CARBON_PT_carbon_tools(Panel):
         r.operator("image.project_edit", text="Quick Edit")
         r.operator("image.project_apply", text="Apply")
         cc.operator('carbon_tools.save_all_images', text="Save All Images")
-        cc.enabled = False
-        if(ob and ob.type == 'MESH' and context.mode == 'PAINT_TEXTURE'):
-            cc.enabled = True
-        
+        cc.enabled = bool(
+            (ob and ob.type == 'MESH' and context.mode == 'PAINT_TEXTURE')
+        )
         c = l.column(align=True)
         c.label(text="IO")
         c.operator('carbon_tools.import_obj_from_zbrush', text="Import from ZBrush")
         c.operator('carbon_tools.export_obj_to_zbrush', text="Export to ZBrush")
-        
+
         c = l.column(align=True)
         c.operator('carbon_tools.copy_transformation', text="Transformation: Selected > Active")
         c.operator('carbon_tools.copy_original_matrix', text="Matrix: Selected > Active")
         c.operator('carbon_tools.export_obj_to_photoscan', text="Export to PhotoScan")
-        
+
         l.separator()
         c = l.column(align=True)
         r = c.row(align=True)
         r.operator('carbon_tools.end_current_procedure', text="End", )
         r.prop(ctp, 'end_keep_wire', toggle=True, text='', icon='SHADING_WIRE', icon_only=True, )
-        
+
         # l.separator()
         # b = l.box()
         # r = b.row()
@@ -1279,7 +1259,7 @@ class CARBON_PT_carbon_tools(Panel):
         #     r = c.row(align=True)
         #     r.operator('carbon_tools.select_non_manifold_extra')
         #     r.prop(ctp, 'select_non_manifold_extra_auto_view', toggle=True, text='', icon='HIDE_OFF' if ctp.select_non_manifold_extra_auto_view else 'HIDE_ON', icon_only=True, )
-        
+
         # b = l.box()
         # r = b.row()
         # r.prop(ctp, 'conversions_expanded', icon='TRIA_DOWN' if ctp.conversions_expanded else 'TRIA_RIGHT', icon_only=True, emboss=False, )
@@ -1299,9 +1279,9 @@ class CARBON_PT_carbon_tools(Panel):
         #     r.prop(ctp, 'diff_negative', toggle=True, )
         #     c.operator('carbon_tools.two_meshes_difference_to_vertex_group')
         #     c.enabled = CARBON_OT_two_meshes_difference_to_vertex_group.poll(context)
-        
+
         r = l.row()
-        r.label(text='Carbon Tools {}'.format(ctp.version))
+        r.label(text=f'Carbon Tools {ctp.version}')
         r.enabled = False
 
 
@@ -1316,26 +1296,29 @@ class CARBON_PT_carbon_tools_utils(Panel):
     def draw(self, context):
         ctp = context.scene.carbon_tools
         ob = context.active_object
-        
+
         l = self.layout
         sub = l.column()
-        
+
         c = sub.column(align=True)
         c.operator('carbon_tools.calc_active_uv_coverage')
         c.operator('carbon_tools.mark_seams_from_uv_islands', text="Seams From Islands", )
         c.operator('carbon_tools.select_seams', text="Select Seams", )
         c.operator('carbon_tools.visualize_uv_seams_as_wireframe_mesh', text="Seams > Wireframe", )
-        
+
         r = c.row(align=True)
         r.operator('carbon_tools.export_uv_layout', text="Export UV Layout", )
         r.prop(ctp, 'export_uv_layout_resolution', text="", )
-        if(ob and ob.type == 'MESH' and context.mode == 'OBJECT' and len(ob.data.uv_layers) > 0):
-            r.active = True
-        else:
-            r.active = False
-        
+        r.active = bool(
+            (
+                ob
+                and ob.type == 'MESH'
+                and context.mode == 'OBJECT'
+                and len(ob.data.uv_layers) > 0
+            )
+        )
         c.operator('carbon_tools.toggle_unselected_wireframe', text="Wireframe", )
-        
+
         r = c.row(align=True)
         r.operator('carbon_tools.select_non_manifold_extra')
         r.prop(ctp, 'select_non_manifold_extra_auto_view', toggle=True, text='', icon='HIDE_OFF' if ctp.select_non_manifold_extra_auto_view else 'HIDE_ON', icon_only=True, )

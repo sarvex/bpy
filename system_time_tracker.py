@@ -91,8 +91,7 @@ class Utils():
     @staticmethod
     def get_preferences():
         a = os.path.splitext(os.path.split(os.path.realpath(__file__))[1])[0]
-        p = bpy.context.preferences.addons[a].preferences
-        return p
+        return bpy.context.preferences.addons[a].preferences
     
     @staticmethod
     def find_handlers():
@@ -115,24 +114,25 @@ class Utils():
 def summary():
     prefs = Utils.get_preferences()
     p = prefs.csv_path
-    
+
     if(not os.path.exists(p)):
         Runtime.summary_message = "File {} does not exist.".format(p)
         return []
     else:
         Runtime.summary_message = ""
-    
+
     # get modified time of csv
     tm = os.path.getmtime(p)
-    
-    if(Runtime.summary is not None):
-        if(tm == Runtime.modified and prefs.level == Runtime.level):
-            # return already parsed results
-            return Runtime.summary
-    
+
+    if (Runtime.summary is not None) and (
+        tm == Runtime.modified and prefs.level == Runtime.level
+    ):
+        # return already parsed results
+        return Runtime.summary
+
     Runtime.modified = tm
     Runtime.level = prefs.level
-    
+
     db = []
     with open(p, encoding='utf-8', ) as f:
         reader = csv.reader(f)
@@ -143,19 +143,19 @@ def summary():
             if(r[4] != "" and r[5] != "" and t != 0):
                 a = [r[0], r[1], t, r[3], r[4], r[5]]
                 db.append(a)
-    
+
     def proj(path, level, ):
         # split path until level is reached
         def slice_last_dir(p):
             return os.path.split(p)[0]
-        
+
         h, t = os.path.split(path)
         pp = "{0}".format(h)
         for i in range(level):
             pp = slice_last_dir(pp)
         proj = os.path.split(pp)[1]
         return proj
-    
+
     # split to projects
     dbp = {}
     for r in db:
@@ -165,7 +165,7 @@ def summary():
         except Exception:
             dbp[p] = []
             dbp[p].append(r)
-    
+
     # sum projects
     a = []
     for proj, ls in dbp.items():
@@ -181,18 +181,18 @@ def summary():
             a.append([proj, Utils.format_time_summary_seconds(s), d])
         else:
             a.append([proj, Utils.format_time_summary(s), d])
-    
+
     # sort by project name
     a.sort(key=lambda v: v[0])
-    
+
     # and make strings
     r = []
     for i, l in enumerate(a):
         r.append(["project '{0}': {1}".format(l[0], l[1]), l[2]])
-    
+
     # store results, so it will not be calculated on each ui redraw
     Runtime.summary = r
-    
+
     return r
 
 
@@ -245,14 +245,13 @@ def scene_update_update(self, context):
     Runtime.update_step = prefs.update_interval
     # force summary update
     Runtime.summary = None
-    if(prefs.scene_update):
+    h = bpy.app.handlers
+    if prefs.scene_update:
         _, _, u = Utils.find_handlers()
-        h = bpy.app.handlers
         if(u == -1):
             h.depsgraph_update_post.append(TIME_TRACKER_update_handler)
     else:
         _, _, u = Utils.find_handlers()
-        h = bpy.app.handlers
         if(u != -1):
             del h.depsgraph_update_post[u]
 
@@ -331,17 +330,17 @@ class TIME_TRACKER_OT_show_project_directory(Operator):
         if(not os.path.exists(d)):
             self.report({'ERROR'}, "The directory {0} does not exist.".format(d))
             return {'FINISHED'}
-        
+
         p = platform.system()
-        if(p == 'Windows'):
+        if (p == 'Windows'):
             os.startfile(os.path.normpath(d))
         elif(p == 'Darwin'):
             subprocess.Popen(['open', d], )
         elif(p == 'Linux'):
             subprocess.Popen(['xdg-open', d], )
         else:
-            raise OSError("Unknown platform: {}.".format(p))
-        
+            raise OSError(f"Unknown platform: {p}.")
+
         return {'FINISHED'}
 
 
@@ -367,21 +366,21 @@ class TIME_TRACKER_OT_open_csv(Operator):
     def execute(self, context):
         prefs = Utils.get_preferences()
         csv = prefs.csv_path
-        
-        if(not os.path.exists(csv)):
-            self.report({'ERROR'}, "No such file: {}".format(csv))
+
+        if (not os.path.exists(csv)):
+            self.report({'ERROR'}, f"No such file: {csv}")
             return {'FINISHED'}
-        
+
         p = platform.system()
-        if(p == 'Windows'):
+        if (p == 'Windows'):
             os.startfile(os.path.normpath(csv))
         elif(p == 'Darwin'):
             subprocess.Popen(['open', csv], )
         elif(p == 'Linux'):
             subprocess.Popen(['xdg-open', csv], )
         else:
-            raise OSError("Unknown platform: {}.".format(csv))
-        
+            raise OSError(f"Unknown platform: {csv}.")
+
         return {'FINISHED'}
 
 
@@ -406,15 +405,15 @@ def TIME_TRACKER_update_handler(null):
 
 def start():
     log("start")
-    
+
     prefs = Utils.get_preferences()
     p = prefs.csv_path
-    
+
     # write starting csv if there is none
     if(not os.path.exists(p)):
         with open(p, mode='w', encoding='utf-8') as f:
             f.write("{0}\n".format(prefs.csv_first_line))
-    
+
     # set handlers
     l, s, u = Utils.find_handlers()
     h = bpy.app.handlers
@@ -422,9 +421,8 @@ def start():
         h.load_post.append(TIME_TRACKER_load_handler)
     if(s == -1):
         h.save_post.append(TIME_TRACKER_save_handler)
-    if(prefs.scene_update):
-        if(u == -1):
-            h.depsgraph_update_post.append(TIME_TRACKER_update_handler)
+    if prefs.scene_update and (u == -1):
+        h.depsgraph_update_post.append(TIME_TRACKER_update_handler)
 
 
 def track(e):
@@ -469,18 +467,18 @@ class TIME_TRACKER_PT_panel(Panel):
         prefs = Utils.get_preferences()
         l = self.layout
         l.prop(prefs, 'enabled', toggle=True, text='Enabled', )
-        
-        if(DEBUG):
+
+        if DEBUG:
             l.separator()
             c = l.column()
-            c.label(text="start: {}".format(Runtime.start))
-            c.label(text="path_message: {}".format(Runtime.path_message))
-            c.label(text="summary_message: {}".format(Runtime.summary_message))
-            c.label(text="modified: {}".format(Runtime.modified))
-            c.label(text="summary: {}".format(Runtime.summary))
-            c.label(text="level: {}".format(Runtime.level))
-            c.label(text="update_last: {}".format(Runtime.update_last))
-            c.label(text="update_step: {}".format(Runtime.update_step))
+            c.label(text=f"start: {Runtime.start}")
+            c.label(text=f"path_message: {Runtime.path_message}")
+            c.label(text=f"summary_message: {Runtime.summary_message}")
+            c.label(text=f"modified: {Runtime.modified}")
+            c.label(text=f"summary: {Runtime.summary}")
+            c.label(text=f"level: {Runtime.level}")
+            c.label(text=f"update_last: {Runtime.update_last}")
+            c.label(text=f"update_step: {Runtime.update_step}")
             c.scale_y = 0.5
 
 
